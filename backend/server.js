@@ -16,10 +16,10 @@ app.use(session({
     resave: false,
     saveUninitialized: false
 }));
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(path.join(__dirname, '../frontend')));
 
 // Database setup
-const db = new sqlite3.Database('./weg_suggestions.db', (err) => {
+const db = new sqlite3.Database(path.join(__dirname, 'weg_suggestions.db'), (err) => {
     if (err) {
         console.error('Error opening database:', err.message);
     } else {
@@ -55,7 +55,7 @@ app.get('/', (req, res) => {
     if (req.session.userId) {
         res.redirect('/suggestions');
     } else {
-        res.sendFile(path.join(__dirname, 'index.html'));
+        res.sendFile(path.join(__dirname, '../frontend/index.html'));
     }
 });
 
@@ -63,7 +63,7 @@ app.get('/suggestions', (req, res) => {
     if (!req.session.userId) {
         return res.redirect('/');
     }
-    res.sendFile(path.join(__dirname, 'suggestions.html'));
+    res.sendFile(path.join(__dirname, '../frontend/suggestions.html'));
 });
 
 app.post('/register', async (req, res) => {
