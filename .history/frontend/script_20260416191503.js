@@ -151,6 +151,7 @@ if (document.getElementById('suggestionForm')) {
     });
 
     loadUserContext();
+    loadSuggestions();
 }
 
 if (document.getElementById('adminForm')) {
@@ -205,7 +206,6 @@ async function loadUserContext() {
         }
 
         setupSidebar();
-        await loadSuggestions();
     } catch (error) {
         console.error('Erro ao carregar dados do usuário:', error);
     }
@@ -231,16 +231,6 @@ function showSidebarSection(targetId) {
             section.classList.add('hidden');
         }
     });
-    closeSuggestionDetail();
-}
-
-function escapeHTML(value) {
-    return String(value)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
 }
 
 async function loadSuggestions() {
@@ -256,183 +246,45 @@ async function loadSuggestions() {
             return;
         }
 
-        window.suggestionFilter = window.suggestionFilter || 'all';
-        window.suggestionsData = Array.isArray(result.suggestions) ? result.suggestions : [];
-        renderSuggestionCards();
-        setupFilterButtons();
+        if (!result.suggestions || result.suggestions.length === 0) {
+            suggestionCards.innerHTML = '<p class="empty-state">Nenhuma sugestão registrada ainda.</p>';
+            return;
+        }
+
+        suggestionCards.innerHTML = result.suggestions.map(item => {
+            const responseHTML = item.response ? `
+                <div class="suggestion-response">
+                    <h3>Resposta do administrador</h3>
+                    <p>${item.response}</p>
+                    ${item.responded_by ? `<small>Respondido por: ${item.responded_by}</small>` : ''}
+                </div>
+            ` : '';
+
+            const adminResponseForm = window.canAdmin ? `
+                <form class="response-form" data-id="${item.id}">
+                    <div class="form-group">
+                        <label for="response-${item.id}">Resposta</label>
+                        <textarea id="response-${item.id}" name="response" rows="3" placeholder="Digite a resposta...">${item.response || ''}</textarea>
+                    </div>
+                    <button type="submit">Enviar resposta</button>
+                </form>
+            ` : '';
+
+            return `
+                <article class="suggestion-card">
+                <div class="suggestion-meta">
+                    <div class="suggestion-name">${item.name}</div>
+                    <div class="suggestion-category">${item.category}</div>
+                </div>
+                <p class="suggestion-text">${item.suggestion}</p>
+                <div class="suggestion-footer">
+                    <span>${item.email}</span>
+                    <span>${item.department || 'Departamento não informado'}</span>
+                    <span>Enviado por: ${item.registered_by || 'Anônimo'}</span>
+                </div>
+            </article>
+        `).join('');
     } catch (error) {
         suggestionCards.innerHTML = '<p class="empty-state">Erro ao carregar sugestões.</p>';
     }
-}
-
-function setupFilterButtons() {
-    document.querySelectorAll('.filter-btn').forEach(button => {
-        button.addEventListener('click', () => {
-            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
-            button.classList.add('active');
-            window.suggestionFilter = button.dataset.filter;
-            renderSuggestionCards();
-        });
-    });
-}
-
-function renderSuggestionCards() {
-    const suggestionCards = document.getElementById('suggestionCards');
-    if (!suggestionCards || !Array.isArray(window.suggestionsData)) return;
-
-    window.suggestionFilter = window.suggestionFilter || 'all';
-    let suggestions = [...window.suggestionsData];
-    if (window.suggestionFilter === 'answered') {
-        suggestions = suggestions.filter(item => item.response);
-    } else if (window.suggestionFilter === 'unanswered') {
-        suggestions = suggestions.filter(item => !item.response);
-    }
-
-    if (!suggestions.length) {
-        const emptyText = window.suggestionFilter === 'answered'
-            ? 'Nenhuma sugestão respondida.'
-            : window.suggestionFilter === 'unanswered'
-                ? 'Nenhuma sugestão não respondida.'
-                : 'Nenhuma sugestão registrada ainda.';
-        suggestionCards.innerHTML = `<p class="empty-state">${emptyText}</p>`;
-        return;
-    }
-
-    suggestionCards.innerHTML = suggestions.map(item => {
-        const statusClass = item.response ? 'answered' : 'unanswered';
-        const statusLabel = item.response ? 'Respondida' : 'Não respondida';
-
-        return `
-            <article class="suggestion-card" data-id="${item.id}">
-                <div class="suggestion-meta">
-                    <div class="suggestion-name">${escapeHTML(item.name)}</div>
-                    <div class="suggestion-category">${escapeHTML(item.category)}</div>
-                </div>
-                <p class="suggestion-text">${escapeHTML(item.suggestion)}</p>
-                <div class="suggestion-footer">
-                    <span>${escapeHTML(item.email)}</span>
-                    <span>${escapeHTML(item.department || 'Departamento não informado')}</span>
-                    <span>Enviado por: ${escapeHTML(item.registered_by || 'Anônimo')}</span>
-                    <span class="suggestion-status ${statusClass}">${statusLabel}</span>
-                </div>
-            </article>
-        `;
-    }).join('');
-
-    attachCardListeners();
-}
-
-function attachCardListeners() {
-    document.querySelectorAll('.suggestion-card').forEach(card => {
-        card.addEventListener('click', () => {
-            const suggestionId = parseInt(card.dataset.id, 10);
-            const item = window.suggestionsData.find(s => s.id === suggestionId);
-            if (item) {
-                openSuggestionDetail(item);
-            }
-        });
-    });
-}
-
-function openSuggestionDetail(item) {
-    const panel = document.getElementById('suggestionDetailPanel');
-    const detailContent = document.getElementById('detailContent');
-    if (!panel || !detailContent) return;
-
-    panel.addEventListener('click', (event) => {
-        if (event.target === panel) {
-            closeSuggestionDetail();
-        }
-    }, { once: true });
-
-    const responseBlock = item.response ? `
-        <div class="detail-block">
-            <h3>Resposta do administrador</h3>
-            <p>${escapeHTML(item.response)}</p>
-            ${item.responded_by ? `<small>Respondido por: ${escapeHTML(item.responded_by)}</small>` : ''}
-        </div>
-    ` : '';
-
-    const summaryBlock = window.canAdmin && item.admin_summary ? `
-        <div class="detail-block">
-            <h3>Resumo melhorado</h3>
-            <p>${escapeHTML(item.admin_summary)}</p>
-            <small>Custo estimado: R$ ${typeof item.estimated_cost === 'number' ? item.estimated_cost.toFixed(2) : 'N/A'} • Duração: ${escapeHTML(item.estimated_duration || 'N/A')}</small>
-        </div>
-    ` : '';
-
-    const responseForm = window.canAdmin ? `
-        <div class="detail-block">
-            <h3>${item.response ? 'Editar resposta' : 'Responder sugestão'}</h3>
-            <form id="detailResponseForm" data-id="${item.id}" class="response-form">
-                <div class="form-group">
-                    <label for="detail-response-${item.id}">Resposta</label>
-                    <textarea id="detail-response-${item.id}" name="response" rows="5" placeholder="Digite a resposta...">${escapeHTML(item.response || '')}</textarea>
-                </div>
-                <button type="submit">${item.response ? 'Atualizar resposta' : 'Enviar resposta'}</button>
-            </form>
-        </div>
-    ` : '';
-
-    detailContent.innerHTML = `
-        <div class="detail-header">
-            <div>
-                <h2>${escapeHTML(item.name)}</h2>
-                <p class="detail-info">${escapeHTML(item.category)} • ${escapeHTML(item.department || 'Departamento não informado')}</p>
-            </div>
-            <span class="suggestion-status ${item.response ? 'answered' : 'unanswered'}">${item.response ? 'Respondida' : 'Não respondida'}</span>
-        </div>
-        <div class="detail-block">
-            <h3>Sugestão</h3>
-            <p>${escapeHTML(item.suggestion)}</p>
-            <small>E-mail: ${escapeHTML(item.email)}</small>
-        </div>
-        ${summaryBlock}
-        ${responseBlock}
-        ${responseForm}
-    `;
-
-    panel.classList.remove('hidden');
-    document.getElementById('closeDetailBtn').addEventListener('click', closeSuggestionDetail);
-    attachDetailResponseListener();
-}
-
-function closeSuggestionDetail() {
-    const panel = document.getElementById('suggestionDetailPanel');
-    if (panel) {
-        panel.classList.add('hidden');
-    }
-}
-
-function attachDetailResponseListener() {
-    const form = document.getElementById('detailResponseForm');
-    if (!form) return;
-
-    form.addEventListener('submit', async function(event) {
-        event.preventDefault();
-        const suggestionId = this.dataset.id;
-        const formData = new FormData(this);
-        const data = Object.fromEntries(formData);
-
-        try {
-            const response = await fetch('/respond-suggestion', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ id: suggestionId, response: data.response }),
-            });
-
-            const result = await response.json();
-            if (response.ok) {
-                alert(result.message || 'Resposta enviada com sucesso.');
-                closeSuggestionDetail();
-                loadSuggestions();
-            } else {
-                alert(result.error);
-            }
-        } catch (error) {
-            alert('Erro ao enviar resposta.');
-        }
-    });
 }

@@ -40,12 +40,12 @@ header {
 .header-center h1 {
     margin: 0;
     font-size: 2.8rem;
-    color: #FFFFFF;
+    color: var(--weg-blue);
 }
 
 .header-center p {
     margin: 8px 0 0;
-    color: #FFFFFF;
+    color: var(--weg-light-blue);
     font-size: 1rem;
 }
 

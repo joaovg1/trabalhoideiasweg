@@ -95,32 +95,27 @@ function ensureJoaoIsAdmin() {
 function runPythonHelper(data) {
     const helperPath = path.join(__dirname, 'ai_helper.py');
     const env = { ...process.env, PYTHONPATH: path.join(__dirname, '..') };
-    const pythonCommands = [process.env.PYTHON || 'python', 'py', 'python3'];
-    let lastError = null;
+    let pythonCmd = process.env.PYTHON || 'python';
 
-    for (const pythonCmd of pythonCommands) {
-        if (!pythonCmd) continue;
-        try {
+    try {
+        return execFileSync(pythonCmd, [helperPath], {
+            input: JSON.stringify(data),
+            encoding: 'utf8',
+            env,
+            maxBuffer: 10 * 1024 * 1024,
+        });
+    } catch (err) {
+        if (err.code === 'ENOENT' && pythonCmd !== 'py') {
+            pythonCmd = 'py';
             return execFileSync(pythonCmd, [helperPath], {
                 input: JSON.stringify(data),
                 encoding: 'utf8',
                 env,
                 maxBuffer: 10 * 1024 * 1024,
             });
-        } catch (err) {
-            lastError = err;
-            if (err.code === 'ENOENT') {
-                continue;
-            }
-            // try next Python launcher if available
         }
+        throw err;
     }
-
-    if (lastError) {
-        throw lastError;
-    }
-
-    throw new Error('Python interpreter not found to run ai_helper.py.');
 }
 
 function getAdminSuggestionPlan(suggestion) {
@@ -128,7 +123,7 @@ function getAdminSuggestionPlan(suggestion) {
         const output = runPythonHelper({ suggestion });
         return JSON.parse(output);
     } catch (error) {
-        console.error('Erro ao gerar planejamento com IA Python:', error && error.stderr ? error.stderr : error.message || error);
+        console.error('Erro ao gerar planejamento com IA Python:', error);
         return null;
     }
 }
@@ -524,10 +519,10 @@ app.get('/suggestions-data', (req, res) => {
                 const plan = getAdminSuggestionPlan(item.suggestion);
                 return {
                     ...item,
-                    admin_summary: plan && plan.description ? plan.description : 'Não foi possível gerar o resumo.' ,
+                    admin_summary: plan && plan.description ? plan.description : null,
                     estimated_cost: plan && typeof plan.budget === 'number' ? plan.budget : null,
-                    estimated_duration: plan && plan.estimated_duration ? plan.estimated_duration : 'Não disponível',
-                    plan_categories: plan && Array.isArray(plan.categories) ? plan.categories : [],
+                    estimated_duration: plan && plan.estimated_duration ? plan.estimated_duration : null,
+                    plan_categories: plan && Array.isArray(plan.categories) ? plan.categories : null,
                 };
             });
         }

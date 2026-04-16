@@ -92,47 +92,6 @@ function ensureJoaoIsAdmin() {
     });
 }
 
-function runPythonHelper(data) {
-    const helperPath = path.join(__dirname, 'ai_helper.py');
-    const env = { ...process.env, PYTHONPATH: path.join(__dirname, '..') };
-    const pythonCommands = [process.env.PYTHON || 'python', 'py', 'python3'];
-    let lastError = null;
-
-    for (const pythonCmd of pythonCommands) {
-        if (!pythonCmd) continue;
-        try {
-            return execFileSync(pythonCmd, [helperPath], {
-                input: JSON.stringify(data),
-                encoding: 'utf8',
-                env,
-                maxBuffer: 10 * 1024 * 1024,
-            });
-        } catch (err) {
-            lastError = err;
-            if (err.code === 'ENOENT') {
-                continue;
-            }
-            // try next Python launcher if available
-        }
-    }
-
-    if (lastError) {
-        throw lastError;
-    }
-
-    throw new Error('Python interpreter not found to run ai_helper.py.');
-}
-
-function getAdminSuggestionPlan(suggestion) {
-    try {
-        const output = runPythonHelper({ suggestion });
-        return JSON.parse(output);
-    } catch (error) {
-        console.error('Erro ao gerar planejamento com IA Python:', error && error.stderr ? error.stderr : error.message || error);
-        return null;
-    }
-}
-
 const CATEGORY_KEYWORDS = {
     "Desenvolvimento de software": [
         "aplicativo", "app", "mobile", "web", "software", "sistema", "site", "plataforma"
@@ -524,10 +483,10 @@ app.get('/suggestions-data', (req, res) => {
                 const plan = getAdminSuggestionPlan(item.suggestion);
                 return {
                     ...item,
-                    admin_summary: plan && plan.description ? plan.description : 'Não foi possível gerar o resumo.' ,
-                    estimated_cost: plan && typeof plan.budget === 'number' ? plan.budget : null,
-                    estimated_duration: plan && plan.estimated_duration ? plan.estimated_duration : 'Não disponível',
-                    plan_categories: plan && Array.isArray(plan.categories) ? plan.categories : [],
+                    admin_summary: plan ? plan.description : null,
+                    estimated_cost: plan ? plan.budget : null,
+                    estimated_duration: plan ? plan.estimated_duration : null,
+                    plan_categories: plan ? plan.categories : null,
                 };
             });
         }

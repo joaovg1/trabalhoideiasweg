@@ -95,32 +95,27 @@ function ensureJoaoIsAdmin() {
 function runPythonHelper(data) {
     const helperPath = path.join(__dirname, 'ai_helper.py');
     const env = { ...process.env, PYTHONPATH: path.join(__dirname, '..') };
-    const pythonCommands = [process.env.PYTHON || 'python', 'py', 'python3'];
-    let lastError = null;
+    let pythonCmd = process.env.PYTHON || 'python';
 
-    for (const pythonCmd of pythonCommands) {
-        if (!pythonCmd) continue;
-        try {
+    try {
+        return execFileSync(pythonCmd, [helperPath], {
+            input: JSON.stringify(data),
+            encoding: 'utf8',
+            env,
+            maxBuffer: 10 * 1024 * 1024,
+        });
+    } catch (err) {
+        if (err.code === 'ENOENT' && pythonCmd !== 'py') {
+            pythonCmd = 'py';
             return execFileSync(pythonCmd, [helperPath], {
                 input: JSON.stringify(data),
                 encoding: 'utf8',
                 env,
                 maxBuffer: 10 * 1024 * 1024,
             });
-        } catch (err) {
-            lastError = err;
-            if (err.code === 'ENOENT') {
-                continue;
-            }
-            // try next Python launcher if available
         }
+        throw err;
     }
-
-    if (lastError) {
-        throw lastError;
-    }
-
-    throw new Error('Python interpreter not found to run ai_helper.py.');
 }
 
 function getAdminSuggestionPlan(suggestion) {
@@ -128,7 +123,7 @@ function getAdminSuggestionPlan(suggestion) {
         const output = runPythonHelper({ suggestion });
         return JSON.parse(output);
     } catch (error) {
-        console.error('Erro ao gerar planejamento com IA Python:', error && error.stderr ? error.stderr : error.message || error);
+        console.error('Erro ao gerar planejamento com IA Python:', error);
         return null;
     }
 }

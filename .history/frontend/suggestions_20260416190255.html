@@ -8,20 +8,20 @@
 </head>
 <body>
     <header>
-        <div class="header-left">
+        <div class="header-brand">
             <img class="logo-img" src="logo.png" alt="WEG">
+            <div class="header-text">
+                <h1>Sistema de Sugestões</h1>
+                <p>Envie suas ideias para melhorar nossa empresa!</p>
+            </div>
         </div>
-        <div class="header-center">
-            <h1>Sistema de Sugestões</h1>
-            <p>Envie suas ideias para melhorar nossa empresa!</p>
-        </div>
+        <button id="logout" class="logout-btn">Sair</button>
     </header>
     <main class="page-layout">
         <aside class="sidebar">
-            <button class="sidebar-btn active" data-target="suggestionSection">Enviar sugestão</button>
-            <button class="sidebar-btn" data-target="viewSection">Consultar sugestões</button>
-            <button id="adminMenuBtn" class="sidebar-btn hidden" data-target="adminPanel">Gerenciar administradores</button>
-            <button id="logout" class="sidebar-btn logout-button">Sair</button>
+            <button class="sidebar-btn active" data-target="suggestionSection">Dar sugestão</button>
+            <button class="sidebar-btn" data-target="viewSection">Ver sugestões</button>
+            <button id="adminMenuBtn" class="sidebar-btn hidden" data-target="adminPanel">Dar permissão de admin</button>
         </aside>
         <section class="page-content">
             <section id="suggestionSection" class="content-section">
@@ -74,11 +74,6 @@
                     <h2>Últimas sugestões</h2>
                     <p>Aqui você vê as sugestões já enviadas com o nome do colaborador.</p>
                 </div>
-                <div class="filter-tabs">
-                    <button class="filter-btn active" data-filter="all">Todas</button>
-                    <button class="filter-btn" data-filter="unanswered">Não respondidas</button>
-                    <button class="filter-btn" data-filter="answered">Respondidas</button>
-                </div>
                 <div id="suggestionCards" class="suggestion-cards">
                     <p class="empty-state">Carregando sugestões...</p>
                 </div>
@@ -86,28 +81,20 @@
 
             <section id="adminPanel" class="content-section admin-panel hidden">
                 <div class="section-header">
-                    <h2>Gerenciar administradores</h2>
-                    <p>Somente administradores podem atribuir permissões de admin a outros usuários.</p>
+                    <h2>Painel de Administrador</h2>
+                    <p>Somente administradores podem promover outros usuários a admin.</p>
                 </div>
                 <form id="adminForm">
                     <div class="form-group">
                         <label for="adminEmail">E-mail do usuário:</label>
                         <input type="email" id="adminEmail" name="email" required>
                     </div>
-                    <button type="submit">Conceder permissão de admin</button>
+                    <button type="submit">Promover a Admin</button>
                     <div id="adminMessage" class="message"></div>
                 </form>
             </section>
         </section>
     </main>
-
-    <div id="suggestionDetailPanel" class="suggestion-detail-panel hidden">
-        <div class="detail-card">
-            <button id="closeDetailBtn" class="detail-close" aria-label="Fechar">×</button>
-            <div id="detailContent"></div>
-        </div>
-    </div>
-
     <footer>
         <p>&copy; 2026 <img class="footer-logo" src="logo.png" alt="WEG"> Todos os direitos reservados.</p>
     </footer>

@@ -339,12 +339,6 @@ function openSuggestionDetail(item) {
     const detailContent = document.getElementById('detailContent');
     if (!panel || !detailContent) return;
 
-    panel.addEventListener('click', (event) => {
-        if (event.target === panel) {
-            closeSuggestionDetail();
-        }
-    }, { once: true });
-
     const responseBlock = item.response ? `
         <div class="detail-block">
             <h3>Resposta do administrador</h3>

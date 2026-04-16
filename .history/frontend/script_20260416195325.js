@@ -256,7 +256,6 @@ async function loadSuggestions() {
             return;
         }
 
-        window.suggestionFilter = window.suggestionFilter || 'all';
         window.suggestionsData = Array.isArray(result.suggestions) ? result.suggestions : [];
         renderSuggestionCards();
         setupFilterButtons();
@@ -280,7 +279,6 @@ function renderSuggestionCards() {
     const suggestionCards = document.getElementById('suggestionCards');
     if (!suggestionCards || !Array.isArray(window.suggestionsData)) return;
 
-    window.suggestionFilter = window.suggestionFilter || 'all';
     let suggestions = [...window.suggestionsData];
     if (window.suggestionFilter === 'answered') {
         suggestions = suggestions.filter(item => item.response);
@@ -338,12 +336,6 @@ function openSuggestionDetail(item) {
     const panel = document.getElementById('suggestionDetailPanel');
     const detailContent = document.getElementById('detailContent');
     if (!panel || !detailContent) return;
-
-    panel.addEventListener('click', (event) => {
-        if (event.target === panel) {
-            closeSuggestionDetail();
-        }
-    }, { once: true });
 
     const responseBlock = item.response ? `
         <div class="detail-block">

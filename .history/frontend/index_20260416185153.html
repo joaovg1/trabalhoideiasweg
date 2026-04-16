@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Sistema de Sugestões WEG</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="logo">
+                <img class="logo-img" src="logo.png" alt="WEG">
+                <p>Sistema de Sugestões</p>
+            </div>
+            <div id="loginForm" class="form-section">
+                <h2>Entrar</h2>
+                <form id="login">
+                    <div class="form-group">
+                        <label for="loginUsername">Usuário ou E-mail:</label>
+                        <input type="text" id="loginUsername" name="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Senha:</label>
+                        <input type="password" id="loginPassword" name="password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="loginRole">Entrar como:</label>
+                        <select id="loginRole" name="role" required>
+                            <option value="">Selecione</option>
+                            <option value="employee">Funcionário</option>
+                            <option value="admin">Administrador</option>
+                        </select>
+                    </div>
+                    <button type="submit">Entrar</button>
+                </form>
+                <p class="toggle-link">Não tem conta? <a href="#" id="showRegister">Criar conta</a></p>
+            </div>
+            <div id="registerForm" class="form-section hidden">
+                <h2>Criar Conta</h2>
+                <form id="register">
+                    <div class="form-group">
+                        <label for="regUsername">Usuário:</label>
+                        <input type="text" id="regUsername" name="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="regEmail">E-mail:</label>
+                        <input type="email" id="regEmail" name="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="regPassword">Senha:</label>
+                        <input type="password" id="regPassword" name="password" required>
+                    </div>
+                    <p class="info-text">O primeiro usuário cadastrado será criado como administrador. Depois, apenas admins podem promover outros usuários a administrador.</p>
+                    <button type="submit">Criar Conta</button>
+                </form>
+                <p class="toggle-link">Já tem conta? <a href="#" id="showLogin">Entrar</a></p>
+            </div>
+            <div id="message" class="message"></div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
