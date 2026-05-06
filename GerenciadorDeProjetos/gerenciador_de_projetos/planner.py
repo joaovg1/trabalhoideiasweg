@@ -1,6 +1,14 @@
 from __future__ import annotations
+import json
+import os
 import re
 from typing import Any
+
+try:
+    import openai
+    _OPENAI_AVAILABLE = True
+except ImportError:
+    _OPENAI_AVAILABLE = False
 
 CATEGORY_KEYWORDS = {
     "Desenvolvimento de software": [
@@ -467,6 +475,121 @@ def _normalize_text(text: str) -> str:
     return re.sub(r"[^\w\s]", " ", text.lower(), flags=re.UNICODE)
 
 
+def _extract_json_object(text: str) -> str:
+    match = re.search(r"(\{[\s\S]*\})", text)
+    return match.group(1) if match else text
+
+
+def _to_number(value: Any) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        cleaned = re.sub(r"[^0-9,.-]", "", value)
+        cleaned = cleaned.replace(".", "").replace(",", ".") if cleaned.count(",") == 1 and cleaned.count(".") == 0 else cleaned
+        try:
+            return float(cleaned)
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
+def _normalize_openai_plan(plan: dict[str, Any], idea: str) -> dict[str, Any]:
+    categories = plan.get("categories") or []
+    if isinstance(categories, str):
+        categories = [categories]
+    if not isinstance(categories, list):
+        categories = []
+
+    materials = plan.get("materials") or []
+    if not isinstance(materials, list):
+        materials = []
+
+    normalized_materials: list[dict[str, Any]] = []
+    for item in materials:
+        if not isinstance(item, dict):
+            continue
+        quantity = _to_number(item.get("quantity", 1))
+        unit_cost = _to_number(item.get("unit_cost", 0.0))
+        total_cost = _to_number(item.get("total_cost", quantity * unit_cost))
+        if total_cost == 0.0:
+            total_cost = round(quantity * unit_cost, 2)
+
+        normalized_materials.append({
+            "item": str(item.get("item", "")),
+            "category": str(item.get("category", "")),
+            "quantity": quantity,
+            "unit": str(item.get("unit", "")),
+            "unit_cost": round(unit_cost, 2),
+            "total_cost": round(total_cost, 2),
+        })
+
+    budget = _to_number(plan.get("budget", sum(item["total_cost"] for item in normalized_materials)))
+    planning_cost_total = _to_number(plan.get("planning_cost_total", sum(item["total_cost"] for item in normalized_materials if item["category"].lower() == "planejamento")))
+    materials_cost_total = _to_number(plan.get("materials_cost_total", budget - planning_cost_total))
+
+    return {
+        "idea": idea,
+        "project_name": str(plan.get("project_name") or _generate_title(idea)),
+        "description": str(plan.get("description") or f"Plano de projeto para '{idea}' com foco em {', '.join(categories)}."),
+        "categories": [str(category) for category in categories],
+        "materials": normalized_materials,
+        "budget": round(budget, 2),
+        "planning_cost_total": round(planning_cost_total, 2),
+        "materials_cost_total": round(materials_cost_total, 2),
+        "estimated_duration": str(plan.get("estimated_duration") or _estimate_duration(categories)),
+    }
+
+
+def _get_chatgpt_project_plan(idea: str) -> dict[str, Any]:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY não configurada no ambiente.")
+    if not _OPENAI_AVAILABLE:
+        raise RuntimeError("Dependência openai não instalada. Instale com 'pip install openai'.")
+
+    openai.api_key = api_key
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "Você é um assistente que transforma uma ideia de projeto em um plano completo com orçamento, "
+                "lista de materiais/serviços e duração estimada. Retorne apenas JSON válido sem explicações "
+                "adicionais."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Ideia do projeto: {idea}\n\n"
+                "Responda apenas com JSON válido no formato:\n"
+                "{\n"
+                "  \"project_name\": \"...\",\n"
+                "  \"description\": \"...\",\n"
+                "  \"categories\": [\"...\", \"...\"],\n"
+                "  \"materials\": [\n"
+                "    {\"item\": \"...\", \"category\": \"...\", \"quantity\": 1, \"unit\": \"...\", \"unit_cost\": 0.0, \"total_cost\": 0.0}\n"
+                "  ],\n"
+                "  \"budget\": 1234.56,\n"
+                "  \"planning_cost_total\": 123.45,\n"
+                "  \"materials_cost_total\": 1111.11,\n"
+                "  \"estimated_duration\": \"...\"\n"
+                "}"
+            ),
+        },
+    ]
+
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=messages,
+        temperature=0.0,
+        max_tokens=800,
+    )
+
+    text = response.choices[0].message.content
+    plan = json.loads(_extract_json_object(text))
+    return _normalize_openai_plan(plan, idea)
+
+
 def _detect_categories(idea: str) -> list[str]:
     cleaned = _normalize_text(idea)
     categories: list[str] = []
@@ -532,6 +655,12 @@ def _build_materials(idea: str, categories: list[str]) -> list[dict[str, Any]]:
 
 
 def generate_project_plan(idea: str) -> dict[str, Any]:
+    if os.getenv("OPENAI_API_KEY") and _OPENAI_AVAILABLE:
+        try:
+            return _get_chatgpt_project_plan(idea)
+        except Exception as exc:
+            print(f"[AVISO] Falha ao gerar projeto com ChatGPT: {exc}. Usando gerador local.")
+
     categories = _detect_categories(idea)
     materials = _build_materials(idea, categories)
     budget = sum(item["total_cost"] for item in materials)

@@ -1,0 +1,22 @@
+{
+  "idea": "cricao de atraca para estacionamento",
+  "project_name": "Cricao de atraca para estacionamento",
+  "description": "Plano de projeto para 'cricao de atraca para estacionamento' com foco em Melhoria de processo industrial.",
+  "categories": [
+    "Melhoria de processo industrial"
+  ],
+  "materials": [
+    {
+      "item": "Análise rápida de viabilidade",
+      "category": "Planejamento",
+      "quantity": 1,
+      "unit": "pacote",
+      "unit_cost": 250.0,
+      "total_cost": 250.0
+    }
+  ],
+  "budget": 250.0,
+  "planning_cost_total": 250.0,
+  "materials_cost_total": 0.0,
+  "estimated_duration": "10 dias úteis"
+}

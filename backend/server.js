@@ -4,10 +4,12 @@ const bcrypt = require('bcrypt');
 const session = require('express-session');
 const bodyParser = require('body-parser');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const OpenAI = require('openai');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 8081;
+const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+let server = null;
 
 // Middleware
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -15,8 +17,36 @@ app.use(bodyParser.json());
 app.use(session({
     secret: 'weg-secret-key',
     resave: false,
-    saveUninitialized: false
+    saveUninitialized: false,
+    cookie: {
+        sameSite: 'lax',
+        secure: false,
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
 }));
+
+// CORS middleware for remote access
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    if (req.method === 'OPTIONS') {
+        res.sendStatus(200);
+    } else {
+        next();
+    }
+});
+
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} from ${req.ip}`);
+    next();
+});
+
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', ip: req.ip, timestamp: new Date().toISOString() });
+});
+
 app.use(express.static(path.join(__dirname, '../frontend')));
 
 // Database setup
@@ -26,7 +56,7 @@ const db = new sqlite3.Database(path.join(__dirname, 'weg_suggestions.db'), (err
     } else {
         console.log('Connected to SQLite database.');
         createTables();
-        ensureJoaoIsAdmin();
+        ensureDefaultAdmin();
     }
 });
 
@@ -53,6 +83,20 @@ function createTables() {
         response_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users (id)
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS budgets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        idea TEXT NOT NULL,
+        project_name TEXT NOT NULL,
+        description TEXT,
+        categories TEXT,
+        materials TEXT,
+        budget REAL,
+        planning_cost_total REAL,
+        materials_cost_total REAL,
+        estimated_duration TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
 
     db.all(`PRAGMA table_info(users)`, [], (err, columns) => {
@@ -82,55 +126,134 @@ function createTables() {
     });
 }
 
-function ensureJoaoIsAdmin() {
-    db.run(`UPDATE users SET role = 'admin' WHERE username = ?`, ['joao'], function(err) {
+function ensureDefaultAdmin() {
+    const adminUsername = 'admin';
+    const adminEmail = 'admin@admin.local';
+    const adminPassword = 'admin';
+
+    db.get('SELECT COUNT(*) AS count FROM users WHERE role = ?', ['admin'], async (err, row) => {
         if (err) {
-            console.error('Erro ao definir joao como admin:', err.message);
-        } else if (this.changes > 0) {
-            console.log('Usuário joao atualizado para admin.');
+            console.error('Erro ao verificar existência de admin:', err.message);
+            return;
         }
+
+        if (row && row.count > 0) {
+            console.log('Já existe um usuário admin no banco de dados.');
+            return;
+        }
+
+        db.get('SELECT * FROM users WHERE username = ?', [adminUsername], async (selectErr, existingUser) => {
+            if (selectErr) {
+                console.error('Erro ao buscar usuário admin existente:', selectErr.message);
+                return;
+            }
+
+            if (existingUser) {
+                db.run('UPDATE users SET role = ? WHERE id = ?', ['admin', existingUser.id], function(updateErr) {
+                    if (updateErr) {
+                        console.error('Erro ao atualizar usuário admin existente:', updateErr.message);
+                    } else {
+                        console.log('Usuário existente "admin" atualizado para role admin.');
+                    }
+                });
+                return;
+            }
+
+            try {
+                const hashedPassword = await bcrypt.hash(adminPassword, 10);
+                db.run(
+                    'INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)',
+                    [adminUsername, adminEmail, hashedPassword, 'admin'],
+                    function(insertErr) {
+                        if (insertErr) {
+                            console.error('Erro ao criar usuário admin padrão:', insertErr.message);
+                        } else {
+                            console.log('Usuário admin padrão criado com sucesso.');
+                        }
+                    }
+                );
+            } catch (hashErr) {
+                console.error('Erro ao gerar hash para admin padrão:', hashErr.message);
+            }
+        });
     });
 }
 
-function runPythonHelper(data) {
-    const helperPath = path.join(__dirname, 'ai_helper.py');
-    const env = { ...process.env, PYTHONPATH: path.join(__dirname, '..') };
-    const pythonCommands = [process.env.PYTHON || 'python', 'py', 'python3'];
-    let lastError = null;
-
-    for (const pythonCmd of pythonCommands) {
-        if (!pythonCmd) continue;
-        try {
-            return execFileSync(pythonCmd, [helperPath], {
-                input: JSON.stringify(data),
-                encoding: 'utf8',
-                env,
-                maxBuffer: 10 * 1024 * 1024,
-            });
-        } catch (err) {
-            lastError = err;
-            if (err.code === 'ENOENT') {
-                continue;
-            }
-            // try next Python launcher if available
-        }
+function _parseOpenAIJson(content) {
+    let jsonText = content.trim();
+    const match = jsonText.match(/(\{[\s\S]*\})/);
+    if (match) {
+        jsonText = match[1];
     }
 
-    if (lastError) {
-        throw lastError;
-    }
-
-    throw new Error('Python interpreter not found to run ai_helper.py.');
+    return JSON.parse(jsonText);
 }
 
-function getAdminSuggestionPlan(suggestion) {
-    try {
-        const output = runPythonHelper({ suggestion });
-        return JSON.parse(output);
-    } catch (error) {
-        console.error('Erro ao gerar planejamento com IA Python:', error && error.stderr ? error.stderr : error.message || error);
-        return null;
+async function getChatGPTProjectPlan(suggestion) {
+    if (!openai) {
+        console.warn('OPENAI_API_KEY ausente: usando fallback local para plano de projeto.');
+        const fallbackPlan = generateProjectPlan(suggestion);
+        return {
+            description: fallbackPlan.description,
+            project_name: fallbackPlan.project_name,
+            categories: fallbackPlan.categories,
+            budget: fallbackPlan.budget,
+            estimated_duration: fallbackPlan.estimated_duration,
+            materials: fallbackPlan.materials,
+            planning_cost_total: fallbackPlan.planning_cost_total,
+            materials_cost_total: fallbackPlan.materials_cost_total,
+        };
     }
+
+    const messages = [
+        {
+            role: 'system',
+            content: 'Você é um assistente que transforma uma sugestão em um plano de projeto detalhado com orçamento e materiais. Retorne apenas JSON válido sem explicações adicionais.'
+        },
+        {
+            role: 'user',
+            content: `Sugestão: ${suggestion}
+
+Gere um plano de projeto detalhado incluindo:
+- description: Descrição do projeto
+- project_name: Nome do projeto
+- categories: Lista de categorias
+- budget: Orçamento total estimado
+- estimated_duration: Duração estimada
+- materials: Lista detalhada de materiais com item, category, quantity, unit, unit_cost, total_cost
+
+Responda apenas com JSON válido.`
+        }
+    ];
+
+    const completion = await openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        messages,
+        temperature: 0.0,
+        max_tokens: 1000,
+    });
+
+    const text = completion.choices?.[0]?.message?.content;
+    if (!text) {
+        throw new Error('Resposta vazia do OpenAI.');
+    }
+
+    const plan = _parseOpenAIJson(text);
+
+    if (typeof plan.budget === 'string') {
+        plan.budget = Number(plan.budget.replace(/\./g, '').replace(/,/g, '.').replace(/[^0-9.]/g, '')) || 0;
+    }
+
+    if (typeof plan.categories === 'string') {
+        plan.categories = [plan.categories];
+    }
+
+    // Ensure materials is array
+    if (!Array.isArray(plan.materials)) {
+        plan.materials = [];
+    }
+
+    return plan;
 }
 
 const CATEGORY_KEYWORDS = {
@@ -360,6 +483,7 @@ app.get('/suggestions', (req, res) => {
 });
 
 app.post('/register', async (req, res) => {
+    console.log('[REGISTER] request body:', req.body);
     const { username, email, password } = req.body;
 
     if (!username || !email || !password) {
@@ -367,24 +491,27 @@ app.post('/register', async (req, res) => {
     }
 
     try {
-        db.get('SELECT COUNT(*) AS count FROM users', [], async (err, row) => {
+        db.get('SELECT COUNT(*) AS count FROM users WHERE role = ?', ['admin'], async (err, row) => {
             if (err) {
+                console.error('[REGISTER] db.get error:', err);
                 return res.status(500).json({ error: 'Erro interno do servidor.' });
             }
 
-            const isFirstUser = row.count === 0;
-            const role = isFirstUser ? 'admin' : 'employee';
+            const noAdminExists = !row || row.count === 0;
+            const role = noAdminExists ? 'admin' : 'employee';
             const hashedPassword = await bcrypt.hash(password, 10);
 
             db.run('INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)',
                 [username, email, hashedPassword, role],
                 function(insertErr) {
                     if (insertErr) {
+                        console.error('[REGISTER] insert error:', insertErr);
                         if (insertErr.message.includes('UNIQUE constraint failed')) {
                             return res.status(400).json({ error: 'Usuário ou e-mail já existe.' });
                         }
                         return res.status(500).json({ error: 'Erro interno do servidor.' });
                     }
+                    console.log('[REGISTER] success user id', this.lastID);
                     req.session.userId = this.lastID;
                     req.session.userRole = role;
                     req.session.username = username;
@@ -392,11 +519,13 @@ app.post('/register', async (req, res) => {
                 });
         });
     } catch (error) {
+        console.error('[REGISTER] exception:', error);
         res.status(500).json({ error: 'Erro interno do servidor.' });
     }
 });
 
 app.post('/login', (req, res) => {
+    console.log('[LOGIN] request body:', req.body);
     const { username, password, role } = req.body;
 
     if (!username || !password || !role) {
@@ -405,17 +534,21 @@ app.post('/login', (req, res) => {
 
     db.get('SELECT * FROM users WHERE username = ? OR email = ?', [username, username], async (err, user) => {
         if (err) {
+            console.error('[LOGIN] db.get error:', err);
             return res.status(500).json({ error: 'Erro interno do servidor.' });
         }
 
         if (!user || !(await bcrypt.compare(password, user.password))) {
+            console.warn('[LOGIN] invalid credentials for', username);
             return res.status(401).json({ error: 'Usuário ou senha incorretos.' });
         }
 
         if (role === 'admin' && user.role !== 'admin') {
+            console.warn('[LOGIN] admin access denied for', username);
             return res.status(401).json({ error: 'Você não tem permissão de administrador.' });
         }
 
+        console.log('[LOGIN] success for user', username);
         req.session.userId = user.id;
         req.session.userRole = user.role;
         req.session.accessRole = role;
@@ -495,7 +628,7 @@ app.post('/respond-suggestion', (req, res) => {
         });
 });
 
-app.get('/suggestions-data', (req, res) => {
+app.get('/suggestions-data', async (req, res) => {
     if (!req.session.userId) {
         return res.status(401).json({ error: 'Não autorizado.' });
     }
@@ -514,22 +647,25 @@ app.get('/suggestions-data', (req, res) => {
 
     query += ' ORDER BY s.created_at DESC';
 
-    db.all(query, params, (err, rows) => {
+    db.all(query, params, async (err, rows) => {
         if (err) {
             return res.status(500).json({ error: 'Erro ao carregar sugestões.' });
         }
 
         if (req.session.userRole === 'admin') {
-            rows = rows.map(item => {
-                const plan = getAdminSuggestionPlan(item.suggestion);
+            rows = await Promise.all(rows.map(async item => {
+                const plan = await getChatGPTProjectPlan(item.suggestion).catch(error => {
+                    console.error('Erro ao gerar plano ChatGPT:', error?.message || error);
+                    return null;
+                });
                 return {
                     ...item,
-                    admin_summary: plan && plan.description ? plan.description : 'Não foi possível gerar o resumo.' ,
+                    admin_summary: plan && plan.description ? plan.description : 'Não foi possível gerar o resumo.',
                     estimated_cost: plan && typeof plan.budget === 'number' ? plan.budget : null,
                     estimated_duration: plan && plan.estimated_duration ? plan.estimated_duration : 'Não disponível',
                     plan_categories: plan && Array.isArray(plan.categories) ? plan.categories : [],
                 };
-            });
+            }));
         }
 
         res.json({ success: true, suggestions: rows });
@@ -547,16 +683,119 @@ app.post('/submit-suggestion', (req, res) => {
         return res.status(400).json({ error: 'Campos obrigatórios não preenchidos.' });
     }
 
+    // First, insert the suggestion
     db.run('INSERT INTO suggestions (user_id, name, email, department, category, suggestion) VALUES (?, ?, ?, ?, ?, ?)',
         [req.session.userId, name, email, department, category, suggestion],
         function(err) {
             if (err) {
                 return res.status(500).json({ error: 'Erro ao salvar sugestão.' });
             }
-            res.json({ success: true });
+
+            // After saving suggestion, generate detailed budget using AI
+            try {
+                const plan = generateProjectPlan(suggestion);
+                db.run(`INSERT INTO budgets (idea, project_name, description, categories, materials, budget, planning_cost_total, materials_cost_total, estimated_duration) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [plan.idea, plan.project_name, plan.description, JSON.stringify(plan.categories), JSON.stringify(plan.materials), plan.budget, plan.planning_cost_total, plan.materials_cost_total, plan.estimated_duration],
+                    function(budgetErr) {
+                        if (budgetErr) {
+                            console.error('Erro ao salvar orçamento:', budgetErr);
+                            // Still return success for suggestion
+                        }
+                        res.json({ success: true, budget_generated: !budgetErr });
+                    });
+            } catch (error) {
+                console.error('Erro ao gerar orçamento:', error);
+                res.json({ success: true, budget_generated: false });
+            }
         });
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+// Routes for budgets
+app.get('/budgets', (req, res) => {
+    if (!req.session.userId) {
+        return res.status(401).json({ error: 'Não autorizado.' });
+    }
+
+    db.all('SELECT * FROM budgets ORDER BY created_at DESC', [], (err, rows) => {
+        if (err) {
+            return res.status(500).json({ error: 'Erro ao carregar orçamentos.' });
+        }
+        res.json({ success: true, budgets: rows });
+    });
 });
+
+app.post('/generate-budget', async (req, res) => {
+    if (!req.session.userId) {
+        return res.status(401).json({ error: 'Não autorizado.' });
+    }
+
+    const { idea } = req.body;
+    if (!idea) {
+        return res.status(400).json({ error: 'Ideia é obrigatória.' });
+    }
+
+    try {
+        const plan = generateProjectPlan(idea);
+        db.run(`INSERT INTO budgets (idea, project_name, description, categories, materials, budget, planning_cost_total, materials_cost_total, estimated_duration) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [plan.idea, plan.project_name, plan.description, JSON.stringify(plan.categories), JSON.stringify(plan.materials), plan.budget, plan.planning_cost_total, plan.materials_cost_total, plan.estimated_duration],
+            function(err) {
+                if (err) {
+                    return res.status(500).json({ error: 'Erro ao salvar orçamento.' });
+                }
+                res.json({ success: true, budget: { id: this.lastID, ...plan } });
+            });
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao gerar orçamento.' });
+    }
+});
+
+function startServer(port) {
+    if (server) {
+        server.close(() => {
+            console.log(`Servidor anterior encerrado antes de tentar iniciar na porta ${port}.`);
+            startServer(port);
+        });
+        return;
+    }
+
+    server = app.listen(port, '0.0.0.0', () => {
+        console.log(`Server running on http://0.0.0.0:${port}`);
+        console.log(`Acesse o site a partir de outro computador usando o IP da máquina: http://10.129.224.41:${port}`);
+    });
+
+    server.on('close', () => {
+        console.log(`Servidor desligado e porta ${port} liberada.`);
+    });
+
+    server.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            console.warn(`Porta ${port} já está em uso. Tentando porta ${port + 1}...`);
+            server = null;
+            startServer(port + 1);
+        } else {
+            console.error('Erro ao iniciar o servidor:', err);
+            process.exit(1);
+        }
+    });
+}
+
+function shutdown() {
+    if (server) {
+        console.log('Encerrando servidor...');
+        server.close(() => {
+            console.log('Servidor encerrado. Porta liberada.');
+            process.exit(0);
+        });
+    } else {
+        process.exit(0);
+    }
+}
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+process.on('uncaughtException', (err) => {
+    console.error('Erro não tratado:', err);
+    shutdown();
+});
+
+startServer(PORT);

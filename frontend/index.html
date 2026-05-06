@@ -3,22 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Sistema de Sugestões WEG</title>
+    <title>SuggesFlow - Login</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="login-page">
-        <aside class="login-side">
-            <div class="brand-box">
-                <img class="brand-logo" src="logo.png" alt="WEG">
+    <div class="auth-shell">
+        <aside class="auth-side">
+            <div class="brand-hero">
+                <div class="brand-mark">SF</div>
+                <h1>SuggesFlow</h1>
+                <p>Organize, envie e acompanhe ideias com um fluxo moderno conectado ao banco e ao servidor.</p>
             </div>
-            <h1>Caixa de Sugestões</h1>
-            <p>Um espaço para compartilhar ideias e transformar o nosso ambiente de trabalho.</p>
+            <div class="auth-features">
+                <div class="feature-item">
+                    <span>✔</span>
+                    <p>Login seguro com sessão</p>
+                </div>
+                <div class="feature-item">
+                    <span>✔</span>
+                    <p>Cadastro rápido de colaboradores</p>
+                </div>
+                <div class="feature-item">
+                    <span>✔</span>
+                    <p>Plataforma já integrada ao banco SQLite</p>
+                </div>
+            </div>
         </aside>
-        <main class="login-panel">
-            <div id="loginForm" class="login-card">
-                <h1>Bem-vindo de volta</h1>
-                <p>Selecione seu perfil e entre com suas credenciais</p>
+        <main class="auth-main">
+            <div class="auth-card" id="loginForm">
+                <div class="auth-title">
+                    <h2>Entrar no SuggesFlow</h2>
+                    <p>Use suas credenciais para acessar o painel de sugestões.</p>
+                </div>
                 <div class="role-switcher">
                     <button type="button" class="role-btn active" data-role="employee">Funcionário</button>
                     <button type="button" class="role-btn" data-role="admin">Administrador</button>
@@ -26,36 +42,38 @@
                 <form id="login">
                     <input type="hidden" id="loginRole" name="role" value="employee">
                     <div class="form-group">
-                        <label for="loginUsername">E-mail ou Usuário</label>
-                        <input type="text" id="loginUsername" name="username" placeholder="seu@email.com" required>
+                        <label for="loginUsername">E-mail ou usuário</label>
+                        <input type="text" id="loginUsername" name="username" placeholder="usuario@empresa.com" required>
                     </div>
                     <div class="form-group">
                         <label for="loginPassword">Senha</label>
-                        <input type="password" id="loginPassword" name="password" placeholder="••••••••" required>
+                        <input type="password" id="loginPassword" name="password" placeholder="Digite sua senha" required>
                     </div>
                     <button id="loginSubmit" type="submit">Entrar como Funcionário</button>
                 </form>
-                <div class="or-separator"><span>OU</span></div>
                 <p class="toggle-link">Não tem conta? <a href="#" id="showRegister">Criar conta</a></p>
                 <div id="message" class="message"></div>
             </div>
-            <div id="registerForm" class="register-card hidden">
-                <h2>Criar Conta</h2>
+            <div class="auth-card hidden" id="registerForm">
+                <div class="auth-title">
+                    <h2>Criar usuário</h2>
+                    <p>Cadastre-se para enviar sugestões e acompanhar suas ideias.</p>
+                </div>
                 <form id="register">
                     <div class="form-group">
-                        <label for="regUsername">Usuário</label>
-                        <input type="text" id="regUsername" name="username" required>
+                        <label for="regUsername">Nome de usuário</label>
+                        <input type="text" id="regUsername" name="username" placeholder="Seu nome" required>
                     </div>
                     <div class="form-group">
                         <label for="regEmail">E-mail</label>
-                        <input type="email" id="regEmail" name="email" required>
+                        <input type="email" id="regEmail" name="email" placeholder="usuario@empresa.com" required>
                     </div>
                     <div class="form-group">
                         <label for="regPassword">Senha</label>
-                        <input type="password" id="regPassword" name="password" required>
+                        <input type="password" id="regPassword" name="password" placeholder="Digite uma senha" required>
                     </div>
-                    <p class="info-text">O primeiro usuário cadastrado será criado como administrador. Depois, apenas admins podem promover outros usuários a administrador.</p>
-                    <button type="submit">Criar Conta</button>
+                    <p class="info-text">O primeiro cadastro se torna administrador. Depois, apenas admins podem conceder esse acesso.</p>
+                    <button type="submit">Criar conta</button>
                 </form>
                 <p class="toggle-link">Já tem conta? <a href="#" id="showLogin">Entrar</a></p>
             </div>
